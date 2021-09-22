@@ -1,0 +1,176 @@
+---
+title: "CCBR1109_secondary_analysis.RMD"
+author: "Samantha Sevilla"
+date: "9/21/2021"
+output: pdf_document
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r}
+library(dplyr)
+library(ggplot2)
+library("org.Mm.eg.db")
+library(ggpubr)
+```
+
+Set directories
+```{r setup, include=FALSE}
+analysis_dir ="~/../../Volumes/ccbr1109/analysis/"
+deg_dir="~/../../Volumes/ccbr1109/rnaseq/"
+resource_dir ="~/../../Volumes/ccbr1109/resources/"
+de_gene_dir=paste0(analysis_dir,"venn/")
+```
+
+Set global variables
+```{r}
+p_val = 0.05
+species = "mouse" #Homo sapiens
+fc = 1.5
+
+compare_list = c("GCN1_SH2.SCR","HNPK_SH1.SCR","HNPK_SH2.SCR")
+cat_list = c("GCN1_SH2","HNPK_SH1","HNPK_SH2")
+
+```
+
+#prep gene lists
+```{r}
+#read in upreg ensemblids, create df
+gene_sig=data.frame()
+gene_nonsig=data.frame()
+
+for (c_id in compare_list){
+    #process sig gene list
+    tmp_df = as.data.frame(read.csv(paste0(de_gene_dir,"genes_up_",c_id,".csv")))
+    
+    #annotate ensemble ids with gene name
+    symbols <- mapIds(org.Mm.eg.db, keys = sapply(strsplit(tmp_df$gene,".", fixed=TRUE), `[`, 1),
+                      keytype = "ENSEMBL", column="SYMBOL", multiVals = "first")
+    
+    for (rowid in rownames(tmp_df)){
+      gene_sig[tmp_df[rowid,"gene"],paste0(c_id,".fc")] = tmp_df[rowid,paste0(c_id,".fc")] 
+      gene_sig[tmp_df[rowid,"gene"],paste0(c_id,".fdr")] = tmp_df[rowid,paste0(c_id,".fdr")]
+      gene_sig[tmp_df[rowid,"gene"],"eid"]=strsplit(tmp_df[rowid,"gene"],".",fixed=TRUE)[[1]][1]
+      gene_sig[tmp_df[rowid,"gene"],"symbol"]=symbols[gene_sig[tmp_df[rowid,"gene"],"eid"]][[1]]
+    }
+    
+    #process non-sig ist
+    tmp_df = as.data.frame(read.csv(paste0(de_gene_dir,"genes_nonde_",c_id,".csv")))
+    
+    #annotate ensemble ids with gene name
+    symbols <- mapIds(org.Mm.eg.db, keys = sapply(strsplit(tmp_df$gene,".", fixed=TRUE), `[`, 1),
+                      keytype = "ENSEMBL", column="SYMBOL", multiVals = "first")
+    
+    for (rowid in rownames(tmp_df)){
+      gene_nonsig[tmp_df[rowid,"gene"],paste0(c_id,".fc")] = tmp_df[rowid,paste0(c_id,".fc")] 
+      gene_nonsig[tmp_df[rowid,"gene"],paste0(c_id,".fdr")] = tmp_df[rowid,paste0(c_id,".fdr")]
+      gene_nonsig[tmp_df[rowid,"gene"],"eid"]=strsplit(tmp_df[rowid,"gene"],".",fixed=TRUE)[[1]][1]
+      gene_nonsig[tmp_df[rowid,"gene"],"symbol"]=symbols[gene_nonsig[tmp_df[rowid,"gene"],"eid"]][[1]]
+    }
+}
+
+#read in gene %c reference
+ref_df = read.csv(paste0(resource_dir,"mm10.3prime_UTR.ACGT.tsv"),sep="\t")
+```
+
+#run analysis
+```{r}
+determine_plot_c<-function(list.in,c_id){
+  sig_gene = subset(ref_df, gene_name %in% list.in[!is.na(list.in)])
+  # Histogram with density plot
+  p = ggplot(sig_gene, aes(x=perc_C)) + 
+    geom_histogram(aes(y=..density..), colour="black", fill="white")+
+    geom_density(alpha=.2, fill="#FF6666") +
+    geom_vline(aes(xintercept=mean(perc_C)),
+            color="blue", linetype="dashed", size=1) + 
+    labs(title=paste(c_id),
+        x =paste0("Percent C: Mean (",round(mean(sig_gene$perc_C),2),"%)"))
+  return(p)
+}
+
+#plot indiv comparisons
+p1 = determine_plot_c((gene_sig %>% filter(if_all(paste0(compare_list[1],".fc"), ~ !is.na(.x))))$symbol,
+                      compare_list[1])
+p2 = determine_plot_c((gene_sig %>% filter(if_all(paste0(compare_list[2],".fc"), ~ !is.na(.x))))$symbol,
+                     compare_list[2])
+p3 = determine_plot_c((gene_sig %>% filter(if_all(paste0(compare_list[3],".fc"), ~ !is.na(.x))))$symbol,
+                      compare_list[3])
+pf = ggarrange(p1,p2,p3,
+               labels = c("A", "B", "C"),
+               ncol = 2, nrow = 2)
+pf = annotate_figure(pf, top = text_grob("Histogram of Sig Genes by %C and Number of Genes", 
+                face = "bold", size = 14))
+print(pf)
+file.in = paste0(analysis_dir,"c_content/","up_indiv_comparisons.png")
+ggsave(filename = file.in, 
+           height = 8.90, width = 12.80, device = "png", plot = pf)
+    
+#plot sig in all
+pf = determine_plot_c((gene_sig %>% filter(if_all(everything(), ~ !is.na(.x))))$symbol,
+                      "Sig in All Contrasts")
+print(pf)
+file.in = paste0(analysis_dir,"c_content/","up_congruent_comparisons.png")
+ggsave(filename = file.in, 
+           height = 8.90, width = 12.80, device = "png", plot = pf)
+
+#uniquely sig
+l1 = gene_sig %>% 
+    filter(if_all(paste0(compare_list[1],".fc"), ~ !is.na(.x))) %>% #significant in contrast
+    filter(if_all(paste0(compare_list[2],".fc"), ~ is.na(.x))) %>% #NA in other contrast
+  filter(if_all(paste0(compare_list[3],".fc"), ~ is.na(.x))) #NA in other contrast
+p1 = determine_plot_c(l1$symbol,
+                      compare_list[1])
+
+l1 = gene_sig %>% 
+    filter(if_all(paste0(compare_list[2],".fc"), ~ !is.na(.x))) %>%
+    filter(if_all(paste0(compare_list[1],".fc"), ~ is.na(.x))) %>%
+  filter(if_all(paste0(compare_list[3],".fc"), ~ is.na(.x)))
+p2 = determine_plot_c(l1$symbol,
+                     compare_list[2])
+
+l1 = gene_sig %>% 
+    filter(if_all(paste0(compare_list[3],".fc"), ~ !is.na(.x))) %>%
+    filter(if_all(paste0(compare_list[1],".fc"), ~ is.na(.x))) %>%
+  filter(if_all(paste0(compare_list[2],".fc"), ~ is.na(.x)))
+p3 = determine_plot_c(l1$symbol,
+                      compare_list[3])
+pf = ggarrange(p1,p2,p3,
+               labels = c("A", "B", "C"),
+               ncol = 2, nrow = 2)
+pf = annotate_figure(pf, top = text_grob("Histogram of Uniquely Sig Genes by %C and Number of Genes", 
+                face = "bold", size = 14))
+print(pf)
+file.in = paste0(analysis_dir,"c_content/","up_unique_comparisons.png")
+ggsave(filename = file.in, 
+           height = 8.90, width = 12.80, device = "png", plot = pf)
+
+
+#other variations
+l1 = gene_sig %>% 
+    filter(if_all(paste0(compare_list[1],".fc"), ~ !is.na(.x))) %>% #significant in GCN1
+    filter(if_all(paste0(compare_list[2],".fc"), ~ is.na(.x))) #NA in HNPK_SH1.SCR
+p1 = determine_plot_c(l1$symbol,
+                      "Sig in GCN1, not in HNPK_SH1")
+
+l1 = gene_sig %>% 
+    filter(if_all(paste0(compare_list[2],".fc"), ~ !is.na(.x))) %>% #significant in HNPK_SH1.SCR
+    filter(if_all(paste0(compare_list[1],".fc"), ~ is.na(.x))) #NA in GCN1
+p2 = determine_plot_c(l1$symbol,
+                     "Sig in HNPK_SH1, not in GCN1")
+
+l1 = gene_sig %>% 
+    filter(if_all(paste0(compare_list[2],".fc"), ~ !is.na(.x))) %>% #significant in HNPK_SH1.SCR
+    filter(if_all(paste0(compare_list[3],".fc"), ~ is.na(.x))) #NA in HNPK_SH2.SCR
+p3 = determine_plot_c(l1$symbol,
+                      "Sig in HNPK_SH1, not in HNPK_SH2")
+pf = ggarrange(p1,p2,p3,
+               labels = c("A", "B", "C"),
+               ncol = 2, nrow = 2)
+pf = annotate_figure(pf, top = text_grob("Histogram of Sig Genes by %C and Number of Genes", 
+                face = "bold", size = 14))
+print(pf)
+file.in = paste0(analysis_dir,"c_content/","up_cross_comparisons.png")
+ggsave(filename = file.in, 
+           height = 8.90, width = 12.80, device = "png", plot = pf)
+```
+
