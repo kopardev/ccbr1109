@@ -84,14 +84,24 @@ determine_plot_c<-function(list.in,c_id){
     geom_vline(aes(xintercept=mean(perc_C)),
             color="blue", linetype="dashed", size=1) + 
     labs(title=paste(c_id),
-        x =paste0("Percent C: Mean (",round(mean(sig_gene$perc_C),2),"%)"))
+        x =paste0("Percent C: Mean (",round(mean(sig_gene$perc_C),2),"%)")) + 
+    ylim(0, 0.1)
   return(p)
 }
 
+#create lists
+l_up =(gene_sig %>% filter(if_all(paste0(compare_list[2],".fc"), ~ !is.na(.x))))
+l_nonde = (gene_nonsig %>% filter(if_all(paste0(compare_list[2],".fc"), ~ !is.na(.x))))
+
+#scale nonde to number in upreg
+l_nonde_sub = sample (subset(l_nonde,!is.na(symbol) & 
+                               symbol %in% ref_df$gene_name)$symbol, #symbols is not NA and symbol is found in refdf
+                      size=length(subset(l_up,!is.na(symbol) & symbol %in% ref_df$gene_name)$symbol), replace =F)
+
 #plot HNPK upreg to nonde
-p1 = determine_plot_c((gene_sig %>% filter(if_all(paste0(compare_list[2],".fc"), ~ !is.na(.x))))$symbol,
+p1 = determine_plot_c(l_up$symbol,
                       paste0("Significantly Upregulated"))
-p2 = determine_plot_c((gene_nonsig %>% filter(if_all(paste0(compare_list[2],".fc"), ~ !is.na(.x))))$symbol,
+p2 = determine_plot_c(l_nonde$symbol,
                      paste0(" Non-significantly differentially regulated"))
 pf = ggarrange(p1,p2,
                labels = c("A", "B"),
@@ -102,6 +112,21 @@ print(pf)
 file.in = paste0(analysis_dir,"c_content/","hnpksh1_up_to_nonde.png")
 ggsave(filename = file.in, 
            height = 8.90, width = 12.80, device = "png", plot = pf)
+
+#plot HNPK upreg to scaled nonde
+p1 = determine_plot_c(l_up$symbol,
+                      paste0("Significantly Upregulated"))
+p2 = determine_plot_c(l_nonde_sub,
+                     paste0(" Non-significantly differentially regulated (scaled)"))
+pf = ggarrange(p1,p2,
+               labels = c("A", "B"),
+               ncol = 2, nrow = 1)
+pf = annotate_figure(pf, top = text_grob("Histograms of HNPK_SH1 to SCR", 
+                face = "bold", size = 14))
+print(pf)
+file.in = paste0(analysis_dir,"c_content/","hnpksh1_up_to_nonde_sub.png")
+ggsave(filename = file.in, 
+           height = 8.90, width = 12.80, device = "png", plot = pf)
 ```
 
 #run statistics
@@ -110,14 +135,23 @@ determine_stats_c<-function(list1.in,list2.in){
   c1 = subset(ref_df, gene_name %in% list1.in[!is.na(list1.in)])$perc_C
   c2 = subset(ref_df, gene_name %in% list2.in[!is.na(list2.in)])$perc_C
 
+  #print general stats
+  list_stats<-function(list.name,l1){
+    print(paste0("***", list.name, " Stats ***"))
+    print(paste0("Min:", round(min(l1),2)))
+    print(paste0("Max:", round(max(l1),2)))
+    print(paste0("Mean:", round(mean(l1),2)))
+    print(paste0("Median:", round(median(l1),2)))
+    print(paste0("Number of genes:",length(l1)))
+  }
+  
+  list_stats("Upregulated", c1)
+  list_stats("Non-regulated",c2)
+  
   #determine sig with Kolmogorov-Smirnov test
   ks.test(c1, c2)
 }
 
-
-l1 = (gene_sig %>% filter(if_all(paste0(compare_list[2],".fc"), ~ !is.na(.x))))
-l2 = (gene_nonsig %>% filter(if_all(paste0(compare_list[2],".fc"), ~ !is.na(.x))))
-determine_stats_c(l1,l2)
-
+determine_stats_c(l_up,l_nonde)
+determine_stats_c(l_up,l_nonde_sub)
 ```
-
