@@ -20,6 +20,8 @@ analysis_dir ="~/../../Volumes/ccbr1109/analysis/"
 deg_dir="~/../../Volumes/ccbr1109/rnaseq/"
 resource_dir ="~/../../Volumes/ccbr1109/resources/"
 de_gene_dir=paste0(analysis_dir,"venn/")
+deg_merged_input=paste0(analysis_dir,"deg_data/merged_deg_fc_DESeq2_20210811.txt")
+
 ```
 
 Set global variables
@@ -155,3 +157,39 @@ determine_stats_c<-function(list1.in,list2.in){
 determine_stats_c(l_up,l_nonde)
 determine_stats_c(l_up,l_nonde_sub)
 ```
+
+#determine overlap between . HNRNPK_SH1 and GCN1_SH2 using FC as 1.5
+```{r}
+overlap_lists<-function(sample1,sample2,fc_in,fdr_in=""){
+  merged_df = read.csv(deg_merged_input,sep="\t")
+
+  if(fdr_in==""){
+    #subset for fc, fdr
+    de_down = subset(merged_df, get(paste0(sample1,".fc"))<=-fc_in) %>%
+            subset(get(paste0(sample2,".fc"))<=-fc_in )
+    de_up = subset(merged_df, get(paste0(sample1,".fc"))>=fc_in) %>%
+            subset(get(paste0(sample2,".fc"))>=fc_in )
+  } else{
+     #subset for fc, fdr
+    de_down = subset(merged_df, get(paste0(sample1,".fc"))<=-fc_in) %>%
+            subset(get(paste0(sample1,".fdr"))<=fdr_in) %>%
+            subset(get(paste0(sample2,".fc"))<=-fc_in ) %>%
+            subset(get(paste0(sample2,".fdr"))<=fdr_in)
+    de_up = subset(merged_df, get(paste0(sample1,".fc"))>=fc_in) %>%
+            subset(get(paste0(sample1,".fdr"))<=fdr_in) %>%
+            subset(get(paste0(sample2,".fc"))>=fc_in ) %>%
+            subset(get(paste0(sample2,".fdr"))<=fdr_in)
+  }
+  
+  de_final = rbind(de_down,de_up)
+  print(paste0("N genes: ", nrow(de_final)))
+  return(de_final)
+}
+
+final_df=overlap_lists("GCN1_SH2.SCR","HNPK_SH1.SCR", 1.5)
+write.csv(final_df,paste0(analysis_dir,"venn/de_fc1.5_overlap_GNC1andHNPK_SH1.csv"))
+
+final_df=overlap_lists("GCN1_SH2.SCR","HNPK_SH1.SCR",1.5, 0.05)
+write.csv(final_df,paste0(analysis_dir,"venn/de_fc1.5andfdr0.05_overlap_GNC1andHNPK_SH1.csv"))
+```
+
