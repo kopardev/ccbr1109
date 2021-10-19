@@ -172,29 +172,27 @@ create_venn_diagrams <-function(cat.in,out_dir){
     name_up = paste0("gene_up_",lev)
     name_down = paste0("gene_down_",lev)
     
-    genes_up = lapply(deg_df[deg_df[[fdr_variable]]<=p_val & deg_df[[fc_variable]]<=-fc,]$gene, function(x) x[!is.na(x)])
-    genes_down = lapply(deg_df[deg_df[[fdr_variable]]<=p_val & deg_df[[fc_variable]]>=fc,]$gene, function(x) x[!is.na(x)])
-      
+    genes_up = lapply(deg_df[deg_df[[fdr_variable]]<=p_val & deg_df[[fc_variable]]>=fc,]$gene, function(x) x[!is.na(x)])
+    genes_down = lapply(deg_df[deg_df[[fdr_variable]]<=p_val & deg_df[[fc_variable]]<=-fc,]$gene, function(x) x[!is.na(x)])
+
     assign(name_up,genes_up)#positive = KO upregulated
     assign(name_down,genes_down)#negative = upregulated over KO
     
     #save gene dfs
-    write.csv(deg_df[deg_df[[fdr_variable]]<=p_val & deg_df[[fc_variable]]<=-fc,]%>% 
-                 filter(if_all(everything(), ~ !is.na(.x))),
+    `%notin%` <- Negate(`%in%`)
+    write.csv(subset(deg_df, gene %in% genes_up),
               paste0(out_dir,"genes_up_",c_variable,".csv"))
-    write.csv(deg_df[deg_df[[fdr_variable]]<=p_val & deg_df[[fc_variable]]>=fc,]%>% 
-                 filter(if_all(everything(), ~ !is.na(.x))),
+    write.csv(subset(deg_df, gene %in% genes_down),
               paste0(out_dir,"genes_down_",c_variable,".csv"))
-    write.csv(deg_df[deg_df[[fdr_variable]]>=p_val | deg_df[[fc_variable]]<=fc | deg_df[[fc_variable]]>=-fc,]%>% 
-                 filter(if_all(everything(), ~ !is.na(.x))),
+    write.csv(subset(deg_df, gene %notin% genes_up & gene %notin% genes_down),
               paste0(out_dir,"genes_nonde_",c_variable,".csv"))
     lev=lev+1
   }
 
   for (num in 1:length(compare_list)){
     print(compare_list[num])
-    print(paste0("--UP: ",length(get(paste0("gene_up_",num)))))
-    print(paste0("--DOWN: ",length(get(paste0("gene_down_",num)))))
+    print(paste0("--UP: ",length(unique(unlist((get(paste0("gene_up_",num))))))))
+    print(paste0("--DOWN: ",length(unique(unlist((get(paste0("gene_down_",num))))))))
   }
   
   # ven for upreglated
@@ -230,7 +228,7 @@ create_venn_diagrams <-function(cat.in,out_dir){
     rotation = 1
   )
 }
-
+out_dir=paste0(analysis_dir,"venn")
 create_venn_diagrams(cat_list,
                      paste0(analysis_dir,"venn/"))
 ```
